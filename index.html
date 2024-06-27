@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="./touch-sdk/dist/main.js"></script>
+    <link href="style.css" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Giest&display=swap" rel="stylesheet">
+    <title>Move Cursor with Arm Direction</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0px;
+            font-family: 'Giest', sans-serif; 
+        }
+        #scoreLabel {
+            font-size: 1em;
+            text-align: center;
+            font-weight: normal;
+        }
+        #score {
+            text-align: center;
+            font-size: 3em;
+            margin-top: 2px;
+            font-weight: normal;
+        }
+        #canvasContainer {
+            position: relative;
+            border-radius: 12px; /* Rounded corners */
+            overflow: hidden; /* Ensure content doesn't overflow the rounded corners */
+            padding: 12px; /* Add padding to prevent chipping */
+            box-sizing: border-box; /* Include padding in the element's total width and height */
+        }
+        #cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgb(198, 224, 46);
+            border-radius: 50%;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+</head>
+<body>
+    <div id="scoreContainer">
+        <div id="scoreLabel">Score</div>
+        <h3 id="score">0</h3>
+    </div>
+
+    <div id="canvasContainer">
+        <div id="cursor"></div>
+    </div>
+    <button id="connectButton"><i class="fa-regular fa-watch"></i> Connect</button>
+    <script>
+          let scoreElement = document.getElementById('score'); // Define scoreElement
+    let score = 0; // Initialize score
+
+         const watch = new TouchSDK.Watch();
+    let cursor = document.getElementById('cursor');
+    let cursorX = 200; // Center of the canvas
+    let cursorY = 200; // Center of the canvas
+    let dipPosition = 0; // Initial random position for the dip
+    let dipWidth = 60; // Width of the dip
+    let stepCounter = 0; // Initialize step counter
+
+    watch.addEventListener('connected', (event) => {
+        console.log('Hand:', watch.hand); // 'left' or 'right'
+        console.log('Haptics Available:', watch.hapticsAvailable); // true or false
+        console.log('Touch Screen Resolution:', watch.touchScreenResolution); // (width, height). (0, 0) if no touch screen
+        console.log('Battery Percentage:', watch.batteryPercentage); // 0-100
+    });
+
+    function moveCursor(dx, dy) {
+        cursorX += dx * 40.0;
+        cursorX = Math.max(0, Math.min(400 - 20, cursorX));
+
+        // Calculate the y-coordinate based on the sine curve
+        if (cursorX > dipPosition - dipWidth / 2 && cursorX < dipPosition + dipWidth / 2) {
+            cursorY = 200; // Dip to the center
+            watch.triggerHaptics(1.0, 50); // Trigger haptics if cursor is inside the dip
+        } else {
+            cursorY = 150; // Constant height
+        }
+
+        cursor.style.left = cursorX + 'px';
+        cursor.style.top = cursorY + 'px';
+
+        // Increment step counter and reduce dipWidth every 4 steps
+        stepCounter++;
+    }
+    watch.addEventListener('armdirectionchanged', (event) => {
+        if (event.detail) {
+            const { dx, dy } = event.detail;
+            moveCursor(dx, dy);
+        }
+    });
+
+        watch.addEventListener('armdirectionchanged', (event) => {
+            if (event.detail) {
+                const { dx, dy } = event.detail;
+                moveCursor(dx, dy);
+            }
+        });
+
+        async function handleConnection() {
+            try {
+                await watch.requestConnection();
+            } catch (error) {
+                console.error(error.message);
+            }
+        }
+
+        document.getElementById('connectButton').addEventListener('click', handleConnection);
+
+        // Additional event listeners and connection handling logic
+        watch.addEventListener('tap', () => {
+            console.log('Tap event detected');
+        });
+
+		watch.addEventListener('surface_tap', () => {
+            console.log('Surface Tap event detected');
+        });
+
+        let numFrames = 30;
+        let t = 0;
+        let minScale = 0, maxScale = 1;
+        let rippleActive = false;
+        let rippleX, rippleY;
+
+        function drawRipple() {
+            if (rippleActive) {
+                t = frameCount / numFrames;
+                let m = 29;
+                for (let i = 0; i < m; i++) {
+                    for (let j = 0; j < m; j++) {
+                        let x = map(i, 0, m - 1, 0, width);
+                        let y = map(j, 0, m - 1, 0, height);
+                        let size = bellCurve((t - offset(x, y)));
+                        strokeWeight(size);
+                        stroke(255, 255, 255, map(size, 1, 5, 50, 200));
+                        point(x, y);
+                    }
+                }
+                if (t >= 1) {
+                    rippleActive = false;
+                }
+            }
+        }
+
+        function offset(x, y) {
+            return 0.002 * dist(x, y, rippleX, rippleY);
+        }
+
+        function bellCurve(p) {
+            return map(stdNormal(p), 0, 1, 0.4, 15);
+        }
+
+        function stdNormal(x) {
+            return Math.pow(Math.E, -Math.pow(9 * x, 2) / 2) / Math.sqrt(2 * Math.PI);
+        }
+
+        function setup() {
+        let canvas = createCanvas(400, 400);
+        canvas.parent('canvasContainer');
+        background(255);
+        dipPosition = random(0, width); // Initial random position for the dip
+        drawSineCurve();
+        
+    }
+
+    function drawSineCurve() {
+        stroke(128, 0, 256); 
+        strokeWeight(4);
+        noFill();
+        beginShape();
+        for (let x = 0; x < width; x++) {
+            let y;
+            if (x > dipPosition - dipWidth / 2 && x < dipPosition + dipWidth / 2) {
+                y = height / 2; // Dip to the center
+            } else {
+                y = height / 2 - 50; // Constant height
+            }
+            vertex(x, y);
+        }
+        endShape();
+    }
+
+    function handleTap(event) {
+        const tapX = cursorX + 6; // Adjust for the circle's radius (12px / 2)
+        const distanceFromDip = Math.abs(tapX - dipPosition);
+        console.log(`Surface tap detected at x=${tapX}, distance from dip=${distanceFromDip}`);
+
+        rippleX = cursorX + 10; // Adjust for the circle's radius (20px / 2)
+        rippleY = cursorY + 10; // Adjust for the circle's radius (20px / 2)
+        rippleActive = true;
+        frameCount = 0; // Reset frame count for ripple effect
+
+        if (tapX > dipPosition - dipWidth / 2 && tapX < dipPosition + dipWidth / 2) {
+            dipPosition = random(0, width); // Move dip to a new random position
+            console.log('Dip moved to new position:', dipPosition);
+            drawSineCurve(); // Redraw the sine curve with the new dip position
+            watch.triggerHaptics(0.3, 50);
+            score++;
+            scoreElement.textContent = `${score}`;
+            dipWidth = Math.max(0, dipWidth - 5); // Reduce dipWidth by 5, ensuring it doesn't go below 0
+        } else {
+            score = 0;
+            scoreElement.textContent = 'Game Over';
+            setTimeout(() => {
+                scoreElement.textContent = '0';
+            }, 2000);
+        }
+    }
+    watch.addEventListener('tap', handleTap);
+    watch.addEventListener('surface_tap', handleTap);
+   
+function draw() {
+    // Clear the canvas
+    clear();
+    background(0,0,0);
+
+    // Redraw the sine curve
+    drawSineCurve();
+    // Draw the ripple effect
+    drawRipple();
+
+    // Calculate the y-coordinate on the sine squared graph at the circle's x-coordinate
+    const circleX = cursorX + 10; // Adjust for the circle's radius (20px / 2)
+    const graphY = height / 2 - 50; // Constant height
+
+    // Draw the vertical line from the grey circle position to the graph position
+    const circleY = cursorY + 10; // Adjust for the circle's radius (20px / 2)
+    // stroke(256,50);
+    // strokeWeight(3);
+    // line(circleX, circleY, circleX, graphY);
+}
+
+
+    function mouseMoved() {
+        const centerX = 200;
+        const centerY = 200;
+        const radius = 50;
+
+        const distance = dist(mouseX, mouseY, centerX, centerY);
+        
+
+    
+    }
+
+        
+    </script>
+</body>
+</html>
